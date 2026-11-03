@@ -772,6 +772,9 @@ def TLSSeg(pcd,spth):
         print(chull)
     else:
         chull = grouped.apply(cube)  # don't think works with Jasmin or parallel_apply only works witn pd < 1.3
+    # Pandas 3 excludes the grouping column from apply(); recover it from the index.
+    if 'clstr' not in chull.columns:
+        chull = chull.reset_index(level='clstr')
     chull = chull.reset_index(drop=True)
 
     ### identify possible stems ###
