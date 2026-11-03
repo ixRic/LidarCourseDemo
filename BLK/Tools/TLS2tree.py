@@ -489,80 +489,99 @@ def other_cylinder_fit2(xyz, xm=0, ym=0, xr=0, yr=0, r=1):
 
 
 def RANSACcylinderFitting4(xyz_, iterations=50, plot=False):
-    # if plot:
-    #    ax = plt.subplot(111)
+    from scipy.optimize import leastsq
+
+    def fit_cylinder(points, xm=0, ym=0, xr=0, yr=0, r=1):
+        x, y, z = points.T
+
+        def errfunc(p, x, y, z):
+            # Python scalars preserve the original Series arithmetic for float32.
+            cos_a, cos_b = float(np.cos(p[2])), float(np.cos(p[3]))
+            sin_a, sin_b = float(np.sin(p[2])), float(np.sin(p[3]))
+            sin_ab = float(np.sin(p[2]) * np.sin(p[3]))
+            return (-cos_b * (float(p[0]) - x) - z * cos_a * sin_b -
+                    sin_ab * (float(p[1]) - y)) ** 2 + (
+                    z * sin_a - cos_a * (float(p[1]) - y)) ** 2 - float(p[4] ** 2)
+
+        p = np.array([xm, ym, xr, yr, r])
+        est_p, success = leastsq(errfunc, p, args=(x, y, z), maxfev=1000)
+        return est_p
 
     bestFit, bestErr = None, np.inf
-    xyz_mean = xyz_.mean(axis=0)
-    xyz_ -= xyz_mean
+    # Keep DataFrame access at the boundary; all fitting operations use arrays.
+    points = xyz_.to_numpy(copy=True)
+    point_index = xyz_.index.to_numpy()
+    unique_index = xyz_.index.is_unique
+    xyz_mean = np.nanmean(points, axis=0)
+    points -= xyz_mean
+    # Preserve the original function's in-place centering of its input.
+    xyz_[['x', 'y', 'z']] = points
 
-    #     for i in tqdm(range(iterations), total=iterations, display=plot):
     for i in range(iterations):
+        # DataFrame.sample(n=20) uses this same random selection.
+        sample_idx = np.random.choice(len(points), size=20, replace=False)
+        sample = points[sample_idx]
+        if unique_index:
+            remaining = np.ones(len(points), dtype=bool)
+            remaining[sample_idx] = False
+        else:
+            remaining = ~np.isin(point_index, point_index[sample_idx])
+        remaining_idx = np.flatnonzero(remaining)
+        xyz = points[remaining_idx]
 
-        xyz = xyz_.copy()
-
-        # prepare sample
-        sample = xyz.sample(n=20)
-        xyz = xyz.loc[~xyz.index.isin(sample.index)]
-
-        x, y, a, b, radius = other_cylinder_fit2(sample, 0, 0, 0, 0, 0)
+        x, y, a, b, radius = fit_cylinder(sample, 0, 0, 0, 0, 0)
         centre = (x, y)
         if not np.all(np.isclose(centre, 0, atol=radius * 1.05)): continue
 
         MX = Rotation.from_euler('xy', [a, b]).inv()
-        xyz[['x', 'y', 'z']] = MX.apply(xyz)
-        xyz.loc[:, 'error'] = np.linalg.norm(xyz[['x', 'y']] - centre, axis=1) / radius
-        idx = xyz.loc[xyz.error.between(.8, 1.2)].index  # 40% of radius is prob quite large
+        xyz = MX.apply(xyz)
+        error = np.linalg.norm(xyz[:, :2] - centre, axis=1) / radius
+        idx = remaining_idx[(error >= .8) & (error <= 1.2)]
 
-        # select points which best fit model from original dataset
-        alsoInliers = xyz_.loc[idx].copy()
-        if len(alsoInliers) < len(xyz_) * .2: continue  # skip if no enough points chosen
+        # Preserve label-based selection if the input has duplicate index values.
+        if not unique_index:
+            idx = np.concatenate([np.flatnonzero(point_index == label)
+                                  for label in point_index[idx]]) if len(idx) else idx
+        alsoInliers = points[idx].copy()
+        if len(alsoInliers) < len(points) * .2: continue
 
-        # refit model using new params
-        x, y, a, b, radius = other_cylinder_fit2(alsoInliers, x, y, a, b, radius)
+        x, y, a, b, radius = fit_cylinder(alsoInliers, x, y, a, b, radius)
         centre = [x, y]
         if not np.all(np.isclose(centre, 0, atol=radius * 1.05)): continue
 
         MX = Rotation.from_euler('xy', [a, b]).inv()
-        alsoInliers[['x', 'y', 'z']] = MX.apply(alsoInliers[['x', 'y', 'z']])
-        # calculate error for "best" subset
-        alsoInliers.loc[:, 'error'] = np.linalg.norm(alsoInliers[['x', 'y']] - centre, axis=1) / radius
+        alsoInliers = MX.apply(alsoInliers)
+        error = np.linalg.norm(alsoInliers[:, :2] - centre, axis=1) / radius
 
-        if variation(alsoInliers.error) < bestErr:
-            # for testing uncomment
+        if variation(error) < bestErr:
             c = Circle(centre, radius=radius, facecolor='none', edgecolor='g')
-
-            bestFit = [radius, centre, c, alsoInliers, MX]
-            bestErr = variation(alsoInliers.error)
+            bestFit = [radius, centre, c, alsoInliers, MX, error]
+            bestErr = variation(error)
 
     if bestFit == None:
-        # usually caused by low number of ransac iterations
-        return np.nan, xyz[['x', 'y', 'z']].mean(axis=0).values, np.inf, len(xyz_)
+        return (np.nan, np.nanmean(np.asfortranarray(xyz[:, :3]), axis=0),
+                np.inf, len(points))
 
-    radius, centre, c, alsoInliers, MX = bestFit
-    centre[0] += xyz_mean.x
-    centre[1] += xyz_mean.y
-    centre = centre + [xyz_mean.z]
+    radius, centre, c, alsoInliers, MX, error = bestFit
+    centre[0] += xyz_mean[0]
+    centre[1] += xyz_mean[1]
+    centre = centre + [xyz_mean[2]]
 
-    # for testing uncomment
     if plot:
         ax = plot
-        radius, Centre, c, alsoInliers, MX = bestFit
+        radius, Centre, c, alsoInliers, MX, error = bestFit
+        plotted_points = MX.apply(points)
+        plotted_points += xyz_mean
+        xyz_[['x', 'y', 'z']] = plotted_points
+        ax.scatter(plotted_points[:, 0], plotted_points[:, 1], s=1, c='grey')
 
-        xyz_[['x', 'y', 'z']] = MX.apply(xyz_)
-        xyz_ += xyz_mean
-        ax.scatter(xyz_.x, xyz_.y, s=1, c='grey')
-
-        alsoInliers[['x', 'y', 'z']] += xyz_mean
-        cbar = ax.scatter(alsoInliers.x, alsoInliers.y, s=10, c=alsoInliers.error)
-        # ax.colorbar(cbar)
-
+        alsoInliers += xyz_mean
+        cbar = ax.scatter(alsoInliers[:, 0], alsoInliers[:, 1], s=10, c=error)
         ax.scatter(Centre[0], Centre[1], marker='+', s=100, c='r')
         ax.add_patch(c)
+        return [radius, centre, bestErr, len(points), ax]
 
-        return [radius, centre, bestErr, len(xyz_), ax]
-
-    return [radius, centre, bestErr, len(xyz_)]
+    return [radius, centre, bestErr, len(points)]
 
 
 def NotRANSAC(xyz):
