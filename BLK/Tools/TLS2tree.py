@@ -660,7 +660,7 @@ def cube(pc):
         pass
     return pc
 
-def TLSSeg(pcd,spth):
+def TLSSeg(pcd,spth, args=None):
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--odir', '-o', type=str, default=spth, help='output directory')
@@ -691,7 +691,7 @@ def TLSSeg(pcd,spth):
     parser.add_argument('--pandarallel', action='store_true', help='use pandarallel')
     parser.add_argument('--verbose', default=1,action='store_true', help='print something')
     # params = parser.parse_args()
-    params, unknown = parser.parse_known_args()
+    params, unknown = parser.parse_known_args(args=args)
 
     if params.pandarallel:
         try:
