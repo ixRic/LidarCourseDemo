@@ -6,6 +6,7 @@
 | Anaconda     | 官网：https://www.anaconda.com/download/success?reg=skipped<br/>镜像：https://mirrors.tuna.tsinghua.edu.cn/anaconda/archive/  | https://blog.csdn.net/Natsuago/article/details/143081283    |
 | PyCharm      | https://www.jetbrains.com/zh-cn/pycharm/download/?section=windows                                                           | 软件安装：https://www.jetbrains.com/zh-cn/help/pycharm/installation-guide.html#silent<br/>Student Pack认证：https://www.jetbrains.com/zh-cn/academy/student-pack/  |
 | LeWoS        | https://github.com/dwang520/LeWoS-py                                                                                                                              |https://github.com/dwang520/LeWoS-py                                                             |
+| QSM             | AdQSM：https://github.com/GuangpengFan/AdQSM<br/>TreeQSM：https://github.com/InverseTampere/TreeQSM<br/>北大网盘：https://disk.pku.edu.cn/link/AA680BAA67E09449768A1F9115F114AE85                                                                                                                                                                  |   	AdQSM：https://github.com/GuangpengFan/AdQSM<br/>TreeQSM：https://github.com/InverseTampere/TreeQSM                                                                                              |
 
 注：已有 Anaconda/Miniconda 的同学，不用重新安装 Anaconda；已有 VSCode 等 IDE 的同学，不用额外安装 PyCharm。
 
